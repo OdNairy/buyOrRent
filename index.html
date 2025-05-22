@@ -3,28 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Конфигурируемый анализ: Покупка vs. Аренда (с налогами)</title>
+    <title>Конфигурируемый анализ: Покупка vs. Аренда (с налогами и URL)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Application Structure Plan: 
+    <!-- Application Structure Plan:
         1. Header: Title.
         2. Introduction: Brief explanation.
-        3. Configuration Section: Input fields for user-defined parameters including tax rates, with debounced automatic recalculation.
+        3. Configuration Section: Input fields for user-defined parameters including tax rates, with debounced automatic recalculation and URL parameterization.
         4. Financial Outcome Summary: Comparative summary of buying vs. renting & investing scenarios, with "Pre-Tax" and "Post-Tax" sub-sections, highlighting scenario profit and investment profit.
         5. Main Interactive Area (Net Flow Analysis):
             - Bar chart visualizing monthly net investment/withdrawal.
             - Key summary figures (total net investment for cash flow equalization).
-        6. Data Table Section: Detailed monthly data for net flow analysis.
+        6. Data Table Section: Detailed monthly data for net flow analysis, with added principal payment column and reordered columns.
         7. Key Insights Section: Explanatory text.
         8. Footer.
-        This structure allows users to configure parameters (including taxes) and see a comprehensive financial outcome comparison (pre and post-tax), alongside cash flow details.
+        This structure allows users to configure parameters, share configurations via URL, and see a comprehensive financial outcome comparison.
     -->
     <!-- Visualization & Content Choices:
-        - Report Info: User-configurable parameters driving all calculations.
-        - Goal: Allow users to explore how different financial parameters, including taxes, affect the net cash flow difference and overall financial outcome, with scenario profit as the main metric.
+        - Report Info: User-configurable parameters driving all calculations, loadable from URL.
+        - Goal: Allow users to explore how different financial parameters, including taxes, affect the net cash flow difference and overall financial outcome, with scenario profit as the main metric and shareable configurations.
         - Viz/Presentation Method: Bar Chart (Chart.js) for net flow, HTML Table for detailed data, Text summary for financial outcomes (pre/post-tax). Input fields for configuration.
-        - Interaction: User input changes parameters, triggering debounced automatic recalculation. Chart tooltips.
-        - Justification: Comprehensive analysis including tax impact. Debounced updates for smooth UX. Scenario profit and investment profit clearly displayed.
+        - Interaction: User input changes parameters, triggering debounced automatic recalculation and URL update. Chart tooltips.
+        - Justification: Comprehensive analysis including tax impact. Debounced updates for smooth UX. URL parameterization for sharing.
         - Library/Method: Chart.js, Tailwind CSS, Vanilla JavaScript.
         - Content: Default values based on previous scenario. Labels and explanations in Russian.
     -->
@@ -112,7 +112,7 @@
             <p class="text-base leading-relaxed">
                 Это приложение позволяет настроить ключевые финансовые параметры для сравнения двух сценариев: покупки недвижимости и аренды с одновременным инвестированием свободных средств.
                 Вы можете увидеть как общий финансовый итог по каждому сценарию (до и после налогов), так и детализацию ежемесячных денежных потоков, необходимых для уравнивания расходов.
-                Измените параметры ниже, и результаты обновятся автоматически с небольшой задержкой для удобства ввода.
+                Измените параметры ниже, и результаты обновятся автоматически с небольшой задержкой для удобства ввода. Текущая конфигурация сохраняется в URL.
             </p>
         </section>
 
@@ -123,7 +123,7 @@
                     <label for="apartmentCost">Стоимость квартиры (EUR)</label>
                     <input type="number" id="apartmentCost" value="427000" step="5000">
                 </div>
-                
+
                 <div class="input-group">
                     <label for="initialInvestmentType">Тип первоначального взноса</label>
                     <select id="initialInvestmentType">
@@ -181,10 +181,10 @@
                 </div>
             </div>
         </section>
-        
+
         <section id="financial-outcome-summary" class="mb-10 p-6 bg-white rounded-lg shadow-md">
             <h2 class="text-2xl font-semibold text-sky-600 mb-4 text-center">Сравнительный финансовый итог за <span id="summaryTermYears">25</span> лет</h2>
-            
+
             <div>
                 <h3 class="text-xl font-bold text-slate-800 mb-3 text-center">До Налогов</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -266,8 +266,9 @@
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Месяц</th>
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Обслуживание (покупка, EUR)</th>
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Проценты по ипотеке (EUR)</th>
-                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Аренда (EUR)</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Тело кредита (EUR)</th>
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Общие расходы при покупке (EUR)</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Аренда (EUR)</th>
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Чистый поток (доинвест./изъятие, EUR)</th>
                         </tr>
                     </thead>
@@ -292,7 +293,9 @@
 
     <script>
         let netInvestmentChartInstance;
-        let debounceTimer;
+        let inputChangeDebounceTimer;
+        let urlUpdateDebounceTimer;
+        let paramsChangedSinceLoadOrLastUrlUpdate = false;
 
         const configElements = {
             apartmentCost: document.getElementById('apartmentCost'),
@@ -310,7 +313,7 @@
             propertySaleTaxRate: document.getElementById('propertySaleTaxRate'),
             investmentSaleTaxRate: document.getElementById('investmentSaleTaxRate')
         };
-        
+
         const summaryElements = {
             summaryTermYears: document.getElementById('summaryTermYears'),
             // Pre-Tax
@@ -343,16 +346,15 @@
             capitalDifferenceFavourPostTax: document.getElementById('capitalDifferenceFavourPostTax')
         };
 
-
         function pmt(rate, nper, pv) {
-            if (nper === 0) return 0; 
+            if (nper === 0) return 0;
             if (rate === 0) return -pv / nper;
             const pvif = Math.pow(1 + rate, nper);
-            if (pvif - 1 === 0) return 0; 
+            if (pvif - 1 === 0) return 0;
             return (-pv * rate * pvif) / (pvif - 1);
         }
-        
-        function updateInitialInvestmentInputState() {
+
+        function updateInitialInvestmentInputState(isInitialLoad = false) {
             const type = configElements.initialInvestmentType.value;
             const apartmentCost = parseFloat(configElements.apartmentCost.value) || 0;
             let currentConfigValue = parseFloat(configElements.initialInvestmentConfigValue.value);
@@ -361,7 +363,7 @@
             if (type === 'percentage') {
                 configElements.initialInvestmentUnitSuffix.textContent = '%';
                 configElements.initialInvestmentConfigValue.step = '1';
-                if (configElements.initialInvestmentUnitSuffix.dataset.previousType === 'value' && apartmentCost > 0) {
+                if (!isInitialLoad && configElements.initialInvestmentUnitSuffix.dataset.previousType === 'value' && apartmentCost > 0) {
                     newConfigValue = Math.round(((currentConfigValue / apartmentCost) * 100) / 5) * 5;
                     if (newConfigValue > 100) newConfigValue = 100;
                     if (newConfigValue < 0) newConfigValue = 0;
@@ -374,40 +376,40 @@
             } else { // type === 'value'
                 configElements.initialInvestmentUnitSuffix.textContent = 'EUR';
                 configElements.initialInvestmentConfigValue.step = '1000';
-                 if (configElements.initialInvestmentUnitSuffix.dataset.previousType === 'percentage' && apartmentCost > 0) {
+                 if (!isInitialLoad && configElements.initialInvestmentUnitSuffix.dataset.previousType === 'percentage' && apartmentCost > 0) {
                     newConfigValue = Math.round(((apartmentCost * currentConfigValue) / 100) / 1000) * 1000;
                  } else if (isNaN(currentConfigValue) || currentConfigValue < 0) {
-                     newConfigValue = Math.round(((apartmentCost * 30) / 100) / 1000) * 1000; 
+                     newConfigValue = Math.round(((apartmentCost * 30) / 100) / 1000) * 1000;
                  }
                 configElements.initialInvestmentConfigValue.value = newConfigValue.toFixed(0);
                 configElements.initialInvestmentUnitSuffix.dataset.previousType = 'value';
             }
         }
 
-
-        function calculateAndDisplayResults() {
+        function getActualInitialInvestment() {
             const apartmentCost = parseFloat(configElements.apartmentCost.value) || 0;
             const initialInvestmentType = configElements.initialInvestmentType.value;
             let initialInvestmentConfigVal = parseFloat(configElements.initialInvestmentConfigValue.value);
-            
             let actualInitialInvestment;
+
             if (initialInvestmentType === 'percentage') {
                 if (isNaN(initialInvestmentConfigVal) || initialInvestmentConfigVal < 0 || initialInvestmentConfigVal > 100) initialInvestmentConfigVal = 30;
-                configElements.initialInvestmentConfigValue.value = initialInvestmentConfigVal.toFixed(0);
                 actualInitialInvestment = (apartmentCost * initialInvestmentConfigVal) / 100;
-            } else { 
+            } else {
                 if (isNaN(initialInvestmentConfigVal) || initialInvestmentConfigVal < 0) initialInvestmentConfigVal = 0;
-                configElements.initialInvestmentConfigValue.value = initialInvestmentConfigVal.toFixed(0);
                 actualInitialInvestment = initialInvestmentConfigVal;
             }
-            if (actualInitialInvestment > apartmentCost) {
-                actualInitialInvestment = apartmentCost;
-                 if (initialInvestmentType === 'value') {
-                    configElements.initialInvestmentConfigValue.value = actualInitialInvestment.toFixed(0);
-                } else { 
-                    configElements.initialInvestmentConfigValue.value = apartmentCost > 0 ? ((actualInitialInvestment / apartmentCost) * 100).toFixed(0) : '0';
-                }
+            if (actualInitialInvestment > apartmentCost && apartmentCost > 0) {
+                 actualInitialInvestment = apartmentCost;
+            } else if (apartmentCost === 0) {
+                 actualInitialInvestment = 0;
             }
+            return actualInitialInvestment;
+        }
+
+        function calculateAndDisplayResults() {
+            const apartmentCost = parseFloat(configElements.apartmentCost.value) || 0;
+            const actualInitialInvestment = getActualInitialInvestment();
 
             const numYears = parseInt(configElements.mortgageTermYears.value) || 25;
             const mortgageAnnualRatePercent = parseFloat(configElements.mortgageAnnualRate.value) || 0;
@@ -420,26 +422,25 @@
             const propertySaleTaxRatePercent = parseFloat(configElements.propertySaleTaxRate.value) || 0;
             const investmentSaleTaxRatePercent = parseFloat(configElements.investmentSaleTaxRate.value) || 0;
 
-
             const mortgageLoanAmount = Math.max(0, apartmentCost - actualInitialInvestment);
             const mortgageAnnualInterestRate = mortgageAnnualRatePercent / 100;
             const monthlyMortgageInterestRate = mortgageAnnualInterestRate / 12;
             const numMonths = numYears * 12;
-            
+
             let calculatedMonthlyMortgagePayment = 0;
             if (mortgageLoanAmount > 0 && numMonths > 0 && monthlyMortgageInterestRate >= 0) {
                  calculatedMonthlyMortgagePayment = -pmt(monthlyMortgageInterestRate, numMonths, mortgageLoanAmount);
                  if (isNaN(calculatedMonthlyMortgagePayment) || !isFinite(calculatedMonthlyMortgagePayment)) {
-                    calculatedMonthlyMortgagePayment = 0; 
+                    calculatedMonthlyMortgagePayment = 0;
                  }
-            } else if (mortgageLoanAmount <= 0) { 
+            } else if (mortgageLoanAmount <= 0) {
                 calculatedMonthlyMortgagePayment = 0;
             }
 
             const rentAnnualIndexRate = rentIndexRatePercent / 100;
             const maintenanceAnnualIndexRate = maintenanceIndexRatePercent / 100;
             const sp500AnnualReturn = sp500RatePercent / 100;
-            const sp500MonthlyReturn = Math.pow(1 + sp500AnnualReturn, 1/12) - 1;
+            const sp500MonthlyReturn = numMonths > 0 ? Math.pow(1 + sp500AnnualReturn, 1/12) - 1 : 0;
             const propertyAnnualGrowthRate = propertyGrowthRatePercent / 100;
 
             const monthlyReportData = [];
@@ -450,29 +451,28 @@
             let totalRentPaid = 0;
             let portfolioValueRentInvest = actualInitialInvestment;
 
-
             for (let month = 1; month <= numMonths; month++) {
                 const currentYearIndex = Math.floor((month - 1) / 12);
-                
+
                 const currentMonthlyMaintenance = initialMaintenance * Math.pow(1 + maintenanceAnnualIndexRate, currentYearIndex);
                 totalMaintenancePaid += currentMonthlyMaintenance;
 
                 const currentMonthlyRent = initialRent * Math.pow(1 + rentAnnualIndexRate, currentYearIndex);
                 totalRentPaid += currentMonthlyRent;
-                
+
                 let interestPaidThisMonth = 0;
                 let principalPaidThisMonth = 0;
 
                 if (remainingPrincipal > 0 && calculatedMonthlyMortgagePayment > 0 && monthlyMortgageInterestRate >= 0) {
                     interestPaidThisMonth = remainingPrincipal * monthlyMortgageInterestRate;
                     principalPaidThisMonth = calculatedMonthlyMortgagePayment - interestPaidThisMonth;
-                    
-                    if (month === numMonths && remainingPrincipal > 0) { 
+
+                    if (month === numMonths && remainingPrincipal > 0) {
                         principalPaidThisMonth = remainingPrincipal;
-                        interestPaidThisMonth = remainingPrincipal * monthlyMortgageInterestRate; 
-                    } else if (remainingPrincipal - principalPaidThisMonth < 0.01 && remainingPrincipal > 0) { 
+                        interestPaidThisMonth = remainingPrincipal * monthlyMortgageInterestRate;
+                    } else if (remainingPrincipal - principalPaidThisMonth < 0.01 && remainingPrincipal > 0) {
                         principalPaidThisMonth = remainingPrincipal;
-                        interestPaidThisMonth = calculatedMonthlyMortgagePayment - principalPaidThisMonth; 
+                        interestPaidThisMonth = calculatedMonthlyMortgagePayment - principalPaidThisMonth;
                         if (interestPaidThisMonth < 0) interestPaidThisMonth = 0;
                     }
                     totalInterestPaid += interestPaidThisMonth;
@@ -487,19 +487,14 @@
                 portfolioValueRentInvest *= (1 + sp500MonthlyReturn);
                 portfolioValueRentInvest += netFlowMonth;
 
-
                 monthlyReportData.push({
-                    month: month,
-                    maintenance: currentMonthlyMaintenance,
-                    interestPaid: interestPaidThisMonth,
-                    rent: currentMonthlyRent,
-                    buy_expenses: costBuyMonth,
-                    net_flow: netFlowMonth
+                    month: month, maintenance: currentMonthlyMaintenance, interestPaid: interestPaidThisMonth,
+                    principalPaid: principalPaidThisMonth, rent: currentMonthlyRent,
+                    buy_expenses: costBuyMonth, net_flow: netFlowMonth
                 });
             }
-            
-            // Pre-Tax Financial Outcome Summary Calculations
-            const futurePropertyValuePreTaxVal = apartmentCost * Math.pow(1 + propertyAnnualGrowthRate, numYears);
+
+            const futurePropertyValuePreTaxVal = apartmentCost > 0 ? apartmentCost * Math.pow(1 + propertyAnnualGrowthRate, numYears) : 0;
             const scenarioProfitBuyPreTaxVal = futurePropertyValuePreTaxVal - actualInitialInvestment - totalInterestPaid - totalMaintenancePaid;
             const finalCapitalRentInvestPreTax = portfolioValueRentInvest;
             const totalCapitalInjectedPortfolio = actualInitialInvestment + cumulativeNetFlow;
@@ -507,14 +502,13 @@
             const scenarioProfitRentInvestPreTaxVal = finalCapitalRentInvestPreTax - actualInitialInvestment - totalRentPaid;
             const capitalDifferenceValuePreTax = scenarioProfitRentInvestPreTaxVal - scenarioProfitBuyPreTaxVal;
 
-
             summaryElements.summaryTermYears.textContent = numYears;
             summaryElements.scenarioProfitBuyPreTax.textContent = scenarioProfitBuyPreTaxVal.toLocaleString('ru-RU', {maximumFractionDigits: 0});
             summaryElements.futurePropertyValuePreTax.textContent = futurePropertyValuePreTaxVal.toLocaleString('ru-RU', {maximumFractionDigits: 0});
             summaryElements.summaryInitialInvestmentBuyPreTax.textContent = actualInitialInvestment.toLocaleString('ru-RU', {maximumFractionDigits: 0});
             summaryElements.totalInterestPaidOutputPreTax.textContent = totalInterestPaid.toLocaleString('ru-RU', {maximumFractionDigits: 0});
             summaryElements.totalMaintenancePaidOutputPreTax.textContent = totalMaintenancePaid.toLocaleString('ru-RU', {maximumFractionDigits: 0});
-            
+
             summaryElements.scenarioProfitRentInvestPreTax.textContent = scenarioProfitRentInvestPreTaxVal.toLocaleString('ru-RU', {maximumFractionDigits: 0});
             summaryElements.futurePortfolioValuePreTax.textContent = finalCapitalRentInvestPreTax.toLocaleString('ru-RU', {maximumFractionDigits: 0});
             summaryElements.investmentProfitPreTaxOutput.textContent = investmentProfitPreTaxVal.toLocaleString('ru-RU', {maximumFractionDigits: 0});
@@ -523,31 +517,19 @@
             summaryElements.totalRentPaidOutputPreTax.textContent = totalRentPaid.toLocaleString('ru-RU', {maximumFractionDigits: 0});
 
             summaryElements.capitalDifferencePreTax.textContent = capitalDifferenceValuePreTax.toLocaleString('ru-RU', {maximumFractionDigits: 0});
-            if (capitalDifferenceValuePreTax > 0) {
-                summaryElements.capitalDifferenceFavourPreTax.textContent = `в пользу "Аренда + Инвестиции"`;
-                summaryElements.capitalDifferencePreTax.classList.remove('text-red-600');
-                summaryElements.capitalDifferencePreTax.classList.add('text-green-600');
-            } else if (capitalDifferenceValuePreTax < 0) {
-                summaryElements.capitalDifferenceFavourPreTax.textContent = `в пользу "Покупка недвижимости"`;
-                summaryElements.capitalDifferencePreTax.classList.remove('text-green-600');
-                summaryElements.capitalDifferencePreTax.classList.add('text-red-600');
-            } else {
-                summaryElements.capitalDifferenceFavourPreTax.textContent = `сценарии примерно равны`;
-                summaryElements.capitalDifferencePreTax.classList.remove('text-green-600', 'text-red-600');
-            }
+            updateDifferenceFavourText(summaryElements.capitalDifferenceFavourPreTax, summaryElements.capitalDifferencePreTax, capitalDifferenceValuePreTax);
 
-            // Post-Tax Financial Outcome Summary Calculations
-            const propertyGainPreTaxVal = Math.max(0, futurePropertyValuePreTaxVal - apartmentCost); 
+            const propertyGainPreTaxVal = Math.max(0, futurePropertyValuePreTaxVal - apartmentCost);
             const propertyTaxAmountVal = propertyGainPreTaxVal * (propertySaleTaxRatePercent / 100);
             const futurePropertyValuePostTaxVal = futurePropertyValuePreTaxVal - propertyTaxAmountVal;
             const scenarioProfitBuyPostTaxVal = futurePropertyValuePostTaxVal - actualInitialInvestment - totalInterestPaid - totalMaintenancePaid;
 
-            const portfolioGainPreTaxVal = investmentProfitPreTaxVal; // Same as investmentProfitPreTaxVal
+            const portfolioGainPreTaxVal = investmentProfitPreTaxVal;
             const investmentTaxAmountVal = portfolioGainPreTaxVal * (investmentSaleTaxRatePercent / 100);
             const futurePortfolioValuePostTaxVal = finalCapitalRentInvestPreTax - investmentTaxAmountVal;
             const investmentProfitPostTaxVal = futurePortfolioValuePostTaxVal - totalCapitalInjectedPortfolio;
             const scenarioProfitRentInvestPostTaxVal = futurePortfolioValuePostTaxVal - actualInitialInvestment - totalRentPaid;
-            
+
             const capitalDifferenceValuePostTax = scenarioProfitRentInvestPostTaxVal - scenarioProfitBuyPostTaxVal;
 
             summaryElements.scenarioProfitBuyPostTax.textContent = scenarioProfitBuyPostTaxVal.toLocaleString('ru-RU', {maximumFractionDigits: 0});
@@ -564,34 +546,21 @@
             summaryElements.investmentTaxAmountOutput.textContent = investmentTaxAmountVal.toLocaleString('ru-RU', {maximumFractionDigits: 0});
 
             summaryElements.capitalDifferencePostTax.textContent = capitalDifferenceValuePostTax.toLocaleString('ru-RU', {maximumFractionDigits: 0});
-             if (capitalDifferenceValuePostTax > 0) {
-                summaryElements.capitalDifferenceFavourPostTax.textContent = `в пользу "Аренда + Инвестиции"`;
-                summaryElements.capitalDifferencePostTax.classList.remove('text-red-600');
-                summaryElements.capitalDifferencePostTax.classList.add('text-green-600');
-            } else if (capitalDifferenceValuePostTax < 0) {
-                summaryElements.capitalDifferenceFavourPostTax.textContent = `в пользу "Покупка недвижимости"`;
-                summaryElements.capitalDifferencePostTax.classList.remove('text-green-600');
-                summaryElements.capitalDifferencePostTax.classList.add('text-red-600');
-            } else {
-                summaryElements.capitalDifferenceFavourPostTax.textContent = `сценарии примерно равны`;
-                summaryElements.capitalDifferencePostTax.classList.remove('text-green-600', 'text-red-600');
-            }
+            updateDifferenceFavourText(summaryElements.capitalDifferenceFavourPostTax, summaryElements.capitalDifferencePostTax, capitalDifferenceValuePostTax);
 
-
-            // Update Net Flow Table and Chart
             const tableBody = document.getElementById('investmentDataBody');
-            tableBody.innerHTML = ''; 
+            tableBody.innerHTML = '';
             monthlyReportData.forEach(data => {
                 const row = tableBody.insertRow();
                 row.insertCell().textContent = data.month;
                 row.insertCell().textContent = data.maintenance.toFixed(2);
                 row.insertCell().textContent = data.interestPaid.toFixed(2);
-                row.insertCell().textContent = data.rent.toFixed(2);
+                row.insertCell().textContent = data.principalPaid.toFixed(2);
                 row.insertCell().textContent = data.buy_expenses.toFixed(2);
+                row.insertCell().textContent = data.rent.toFixed(2);
                 const netFlowCell = row.insertCell();
                 netFlowCell.textContent = data.net_flow.toFixed(2);
-                netFlowCell.classList.add(data.net_flow >= 0 ? 'text-green-600' : 'text-red-600');
-                netFlowCell.classList.add('font-medium');
+                netFlowCell.classList.add(data.net_flow >= 0 ? 'text-green-600' : 'text-red-600', 'font-medium');
             });
 
             document.getElementById('total-net-investment').textContent = `Итоговый чистый поток средств для уравнивания расходов за ${numYears} лет: ${cumulativeNetFlow.toFixed(2)} EUR`;
@@ -613,38 +582,22 @@
                     }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false, 
+                    responsive: true, maintainAspectRatio: false, animation: false,
                     scales: {
-                        y: {
-                            beginAtZero: false,
-                            title: { display: true, text: 'Сумма (EUR)', font: { size: 14 } },
-                            ticks: { callback: function(value) { return value.toLocaleString('ru-RU') + ' EUR'; } }
-                        },
-                        x: {
-                            title: { display: true, text: `Месяц (Всего ${numMonths})`, font: { size: 14 } },
-                            ticks: {
-                                autoSkip: true,
-                                maxTicksLimit: Math.max(10, Math.min(25, numMonths > 0 ? numMonths / 12 : 25)),
-                                maxRotation: 90, 
-                                minRotation: 45,
+                        y: { beginAtZero: false, title: { display: true, text: 'Сумма (EUR)', font: { size: 14 } }, ticks: { callback: function(value) { return value.toLocaleString('ru-RU') + ' EUR'; } } },
+                        x: { title: { display: true, text: `Месяц (Всего ${numMonths})`, font: { size: 14 } },
+                            ticks: { autoSkip: true, maxTicksLimit: Math.max(10, Math.min(25, numMonths > 0 ? numMonths / 12 : 25)), maxRotation: 90, minRotation: 45,
                                 callback: function(value, index) {
                                    if (monthlyReportData && monthlyReportData[index]) {
                                        const monthNumber = monthlyReportData[index].month;
-                                       if (numMonths <= 60 || (monthNumber -1) % 12 === 0 || numMonths === 0) { 
-                                           return `М ${monthNumber}`;
-                                       }
-                                   }
-                                   return null; 
+                                       if (numMonths <= 60 || (monthNumber -1) % 12 === 0 || numMonths === 0) { return `М ${monthNumber}`; }
+                                   } return null;
                                 }
                             }
                         }
                     },
-                    plugins: {
-                        legend: { display: true, position: 'top' },
-                        tooltip: {
-                            enabled: true, mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)',
+                    plugins: { legend: { display: true, position: 'top' },
+                        tooltip: { enabled: true, mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)',
                             callbacks: {
                                 title: function(tooltipItems) {
                                      if (tooltipItems.length > 0 && monthlyReportData[tooltipItems[0].dataIndex]) {
@@ -652,15 +605,12 @@
                                         const year = Math.floor(monthIndex / 12) + 1;
                                         const monthInYear = (monthIndex % 12) + 1;
                                         return `Месяц ${monthIndex + 1} (Год ${year}, мес. ${monthInYear})`;
-                                    }
-                                    return '';
+                                    } return '';
                                 },
                                 label: function(context) {
                                     let label = context.dataset.label || '';
                                     if (label) { label += ': '; }
-                                    if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toLocaleString('ru-RU', { style: 'currency', currency: 'EUR' });
-                                    }
+                                    if (context.parsed.y !== null) { label += context.parsed.y.toLocaleString('ru-RU', { style: 'currency', currency: 'EUR' }); }
                                     return label;
                                 }
                             }
@@ -669,30 +619,85 @@
                 }
             });
         }
-        
+
+        function updateDifferenceFavourText(favourElement, differenceElement, differenceValue) {
+            if (differenceValue > 0) {
+                favourElement.textContent = `в пользу "Аренда + Инвестиции"`;
+                differenceElement.classList.remove('text-red-600');
+                differenceElement.classList.add('text-green-600');
+            } else if (differenceValue < 0) {
+                favourElement.textContent = `в пользу "Покупка недвижимости"`;
+                differenceElement.classList.remove('text-green-600');
+                differenceElement.classList.add('text-red-600');
+            } else {
+                favourElement.textContent = `сценарии примерно равны`;
+                differenceElement.classList.remove('text-green-600', 'text-red-600');
+            }
+        }
+
         function handleInputChange() {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                if (this && this.id === 'initialInvestmentType') { 
-                     updateInitialInvestmentInputState(); 
+            paramsChangedSinceLoadOrLastUrlUpdate = true;
+            clearTimeout(inputChangeDebounceTimer);
+            inputChangeDebounceTimer = setTimeout(() => {
+                if (this && this.id === 'initialInvestmentType') {
+                     updateInitialInvestmentInputState();
                 }
                 calculateAndDisplayResults();
-            }, 300); 
+
+                clearTimeout(urlUpdateDebounceTimer);
+                urlUpdateDebounceTimer = setTimeout(updateUrlWithParams, 10000);
+
+            }, 300);
+        }
+
+        function updateUrlWithParams() {
+            if (!paramsChangedSinceLoadOrLastUrlUpdate) {
+                return;
+            }
+            const params = new URLSearchParams();
+            Object.keys(configElements).forEach(key => {
+                if (configElements[key] && configElements[key].id !== 'initialInvestmentUnitSuffix') {
+                    params.set(key, configElements[key].value);
+                }
+            });
+            const newRelativePathQuery = window.location.pathname + '?' + params.toString();
+            history.pushState(null, '', newRelativePathQuery);
+            paramsChangedSinceLoadOrLastUrlUpdate = false;
+        }
+
+        function loadParamsFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let paramsFound = false;
+            urlParams.forEach((value, key) => {
+                if (configElements[key] && configElements[key].id !== 'initialInvestmentUnitSuffix') {
+                    configElements[key].value = value;
+                    paramsFound = true;
+                }
+            });
+            return paramsFound;
         }
 
         document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('currentYear').textContent = new Date().getFullYear();
-            
+
+            const paramsLoadedFromUrl = loadParamsFromUrl();
+
             configElements.initialInvestmentType.addEventListener('change', handleInputChange);
-            
+
             Object.values(configElements).forEach(element => {
-                if (element && element.id !== 'initialInvestmentType' && element.id !== 'initialInvestmentUnitSuffix') { 
+                if (element && element.id !== 'initialInvestmentType' && element.id !== 'initialInvestmentUnitSuffix') {
                      element.addEventListener('input', handleInputChange);
                 }
             });
-            
-            updateInitialInvestmentInputState(); 
-            calculateAndDisplayResults(); 
+
+            updateInitialInvestmentInputState(true);
+            calculateAndDisplayResults();
+
+            if(paramsLoadedFromUrl) {
+                paramsChangedSinceLoadOrLastUrlUpdate = true;
+                clearTimeout(urlUpdateDebounceTimer);
+                urlUpdateDebounceTimer = setTimeout(updateUrlWithParams, 5000);
+            }
         });
     </script>
 </body>
