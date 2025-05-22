@@ -9,7 +9,7 @@
     <!-- Application Structure Plan:
         1. Header: Title.
         2. Introduction: Brief explanation.
-        3. Collapsible Configuration Section: Input fields for user-defined parameters including tax rates and mortgage payment type, organized into two columns, with debounced automatic recalculation and URL parameterization, supporting browser history navigation. A toggle button controls visibility.
+        3. Collapsible Configuration Section: Input fields for user-defined parameters including tax rates and mortgage payment type, organized into two columns, with debounced automatic recalculation and URL parameterization, supporting browser history navigation. A toggle button controls visibility. Apartment cost input changed to '000 €'. Default initial investment percentage changed to 25%.
         4. Financial Outcome Summary: Comparative summary of buying vs. renting & investing scenarios, with "Pre-Tax" and "Post-Tax" sub-sections, highlighting scenario profit and investment profit.
         5. Main Interactive Area (Net Flow Analysis):
             - Bar chart visualizing monthly net investment/withdrawal.
@@ -17,14 +17,14 @@
         6. Data Table Section: Detailed monthly data for net flow analysis.
         7. Key Insights Section: Explanatory text.
         8. Footer.
-        This structure allows users to configure parameters, share configurations via URL, navigate history, and see a comprehensive financial outcome comparison, with a collapsible configuration for better focus on results.
+        This structure allows users to configure parameters, share configurations via URL, navigate history, and see a comprehensive financial outcome comparison, with a collapsible configuration for better focus on results. Core calculation logic refactored for better testability.
     -->
     <!-- Visualization & Content Choices:
         - Report Info: User-configurable parameters driving all calculations, loadable from URL, and responsive to browser history changes.
         - Goal: Allow users to explore how different financial parameters, including taxes and mortgage type, affect the net cash flow difference and overall financial outcome, with scenario profit as the main metric and shareable/navigable configurations. Configuration section is collapsible.
         - Viz/Presentation Method: Bar Chart (Chart.js) for net flow, HTML Table for detailed data, Text summary for financial outcomes (pre/post-tax). Input fields for configuration.
         - Interaction: User input changes parameters, triggering debounced automatic recalculation and URL update. Browser back/forward updates inputs and calculations. Chart tooltips. Toggle button for configuration visibility.
-        - Justification: Comprehensive analysis including tax impact and mortgage types. Debounced updates for smooth UX. URL parameterization and history support for enhanced usability. Collapsible config improves focus.
+        - Justification: Comprehensive analysis including tax impact and mortgage types. Debounced updates for smooth UX. URL parameterization and history support for enhanced usability. Collapsible config improves focus. Refactored logic for testability.
         - Library/Method: Chart.js, Tailwind CSS, Vanilla JavaScript.
         - Content: Default values based on previous scenario. Labels and explanations in Russian.
     -->
@@ -160,8 +160,11 @@
                 <div>
                     <h3 class="config-column-title">Сценарий: Покупка недвижимости</h3>
                     <div class="input-group">
-                        <label for="apartmentCost">Стоимость квартиры (EUR)</label>
-                        <input type="number" id="apartmentCost" value="427000" step="5000">
+                        <label for="apartmentCost">Стоимость квартиры</label>
+                        <div class="input-value-unit-container">
+                           <input type="number" id="apartmentCost" value="450" step="5">
+                           <span class="unit-suffix">000 €</span>
+                        </div>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
                         <div class="input-group">
@@ -174,7 +177,7 @@
                         <div class="input-group">
                             <label for="initialInvestmentConfigValue">Значение первон. взноса</label>
                             <div class="input-value-unit-container">
-                                <input type="number" id="initialInvestmentConfigValue" value="30">
+                                <input type="number" id="initialInvestmentConfigValue" value="25">
                                 <span id="initialInvestmentUnitSuffix" class="unit-suffix">%</span>
                             </div>
                         </div>
@@ -414,19 +417,20 @@
 
         function updateInitialInvestmentInputState(isInitialLoad = false) {
             const type = configElements.initialInvestmentType.value;
-            const apartmentCost = parseFloat(configElements.apartmentCost.value) || 0;
+            const apartmentCostInThousands = parseFloat(configElements.apartmentCost.value) || 0;
+            const apartmentCostFull = apartmentCostInThousands * 1000;
             let currentConfigValue = parseFloat(configElements.initialInvestmentConfigValue.value);
             let newConfigValue = currentConfigValue;
 
             if (type === 'percentage') {
                 configElements.initialInvestmentUnitSuffix.textContent = '%';
                 configElements.initialInvestmentConfigValue.step = '1';
-                if (!isInitialLoad && configElements.initialInvestmentUnitSuffix.dataset.previousType === 'value' && apartmentCost > 0) {
-                    newConfigValue = Math.round(((currentConfigValue / apartmentCost) * 100) / 5) * 5;
+                if (!isInitialLoad && configElements.initialInvestmentUnitSuffix.dataset.previousType === 'value' && apartmentCostFull > 0) {
+                    newConfigValue = Math.round(((currentConfigValue / apartmentCostFull) * 100) / 5) * 5;
                     if (newConfigValue > 100) newConfigValue = 100;
                     if (newConfigValue < 0) newConfigValue = 0;
                 } else if (isNaN(currentConfigValue) || currentConfigValue > 100 || currentConfigValue < 0) {
-                     newConfigValue = 30;
+                     newConfigValue = 25; // Default to 25%
                 }
                 configElements.initialInvestmentConfigValue.value = newConfigValue.toFixed(0);
                 configElements.initialInvestmentUnitSuffix.dataset.previousType = 'percentage';
@@ -434,10 +438,10 @@
             } else { // type === 'value'
                 configElements.initialInvestmentUnitSuffix.textContent = 'EUR';
                 configElements.initialInvestmentConfigValue.step = '1000';
-                 if (!isInitialLoad && configElements.initialInvestmentUnitSuffix.dataset.previousType === 'percentage' && apartmentCost > 0) {
-                    newConfigValue = Math.round(((apartmentCost * currentConfigValue) / 100) / 1000) * 1000;
+                 if (!isInitialLoad && configElements.initialInvestmentUnitSuffix.dataset.previousType === 'percentage' && apartmentCostFull > 0) {
+                    newConfigValue = Math.round(((apartmentCostFull * currentConfigValue) / 100) / 1000) * 1000;
                  } else if (isNaN(currentConfigValue) || currentConfigValue < 0) {
-                     newConfigValue = Math.round(((apartmentCost * 30) / 100) / 1000) * 1000;
+                     newConfigValue = Math.round(((apartmentCostFull * 25) / 100) / 1000) * 1000; // Default EUR based on 25%
                  }
                 configElements.initialInvestmentConfigValue.value = newConfigValue.toFixed(0);
                 configElements.initialInvestmentUnitSuffix.dataset.previousType = 'value';
@@ -445,43 +449,36 @@
         }
 
         function getActualInitialInvestment() {
-            const apartmentCost = parseFloat(configElements.apartmentCost.value) || 0;
+            const apartmentCostInThousands = parseFloat(configElements.apartmentCost.value) || 0;
+            const apartmentCostFull = apartmentCostInThousands * 1000;
             const initialInvestmentType = configElements.initialInvestmentType.value;
             let initialInvestmentConfigVal = parseFloat(configElements.initialInvestmentConfigValue.value);
             let actualInitialInvestment;
 
             if (initialInvestmentType === 'percentage') {
-                if (isNaN(initialInvestmentConfigVal) || initialInvestmentConfigVal < 0 || initialInvestmentConfigVal > 100) initialInvestmentConfigVal = 30;
-                actualInitialInvestment = (apartmentCost * initialInvestmentConfigVal) / 100;
+                if (isNaN(initialInvestmentConfigVal) || initialInvestmentConfigVal < 0 || initialInvestmentConfigVal > 100) initialInvestmentConfigVal = 25; // Default 25%
+                actualInitialInvestment = (apartmentCostFull * initialInvestmentConfigVal) / 100;
             } else {
                 if (isNaN(initialInvestmentConfigVal) || initialInvestmentConfigVal < 0) initialInvestmentConfigVal = 0;
                 actualInitialInvestment = initialInvestmentConfigVal;
             }
-            if (actualInitialInvestment > apartmentCost && apartmentCost > 0) {
-                 actualInitialInvestment = apartmentCost;
-            } else if (apartmentCost === 0) {
+            if (actualInitialInvestment > apartmentCostFull && apartmentCostFull > 0) {
+                 actualInitialInvestment = apartmentCostFull;
+            } else if (apartmentCostFull === 0) {
                  actualInitialInvestment = 0;
             }
             return actualInitialInvestment;
         }
 
-        function calculateAndDisplayResults() {
-            const apartmentCost = parseFloat(configElements.apartmentCost.value) || 0;
-            const actualInitialInvestment = getActualInitialInvestment();
+        // Core Calculation Logic (Refactored for potential future testing)
+        function performCoreCalculations(params) {
+            const {
+                apartmentCostFull, actualInitialInvestment, numYears, mortgageAnnualRatePercent,
+                mortgagePaymentMethod, initialRent, rentIndexRatePercent, initialMaintenance,
+                maintenanceIndexRatePercent, sp500RatePercent, propertyGrowthRatePercent
+            } = params;
 
-            const numYears = parseInt(configElements.mortgageTermYears.value) || 25;
-            const mortgageAnnualRatePercent = parseFloat(configElements.mortgageAnnualRate.value) || 0;
-            const mortgagePaymentMethod = configElements.mortgagePaymentType.value;
-            const initialRent = parseFloat(configElements.initialMonthlyRent.value) || 0;
-            const rentIndexRatePercent = parseFloat(configElements.rentIndexRate.value) || 0;
-            const initialMaintenance = parseFloat(configElements.initialMonthlyMaintenance.value) || 0;
-            const maintenanceIndexRatePercent = parseFloat(configElements.maintenanceIndexRate.value) || 0;
-            const sp500RatePercent = parseFloat(configElements.sp500Rate.value) || 0;
-            const propertyGrowthRatePercent = parseFloat(configElements.propertyGrowthRate.value) || 0;
-            const propertySaleTaxRatePercent = parseFloat(configElements.propertySaleTaxRate.value) || 0;
-            const investmentSaleTaxRatePercent = parseFloat(configElements.investmentSaleTaxRate.value) || 0;
-
-            const mortgageLoanAmount = Math.max(0, apartmentCost - actualInitialInvestment);
+            const mortgageLoanAmount = Math.max(0, apartmentCostFull - actualInitialInvestment);
             const mortgageAnnualInterestRate = mortgageAnnualRatePercent / 100;
             const monthlyMortgageInterestRate = mortgageAnnualInterestRate / 12;
             const numMonths = numYears * 12;
@@ -556,7 +553,6 @@
                     if (remainingPrincipal < 0.01) remainingPrincipal = 0;
                 }
 
-
                 const costBuyMonth = (mortgageLoanAmount > 0 ? currentMonthMortgagePayment : 0) + currentMonthlyMaintenance;
                 const netFlowMonth = costBuyMonth - currentMonthlyRent;
                 cumulativeNetFlow += netFlowMonth;
@@ -570,8 +566,46 @@
                     buy_expenses: costBuyMonth, net_flow: netFlowMonth
                 });
             }
+            return {
+                monthlyReportData, cumulativeNetFlow, totalInterestPaid, totalMaintenancePaid,
+                totalRentPaid, portfolioValueRentInvest, actualInitialInvestment, numYears,
+                sp500RatePercent, propertyAnnualGrowthRate, apartmentCostFull
+            };
+        }
 
-            const futurePropertyValuePreTaxVal = apartmentCost > 0 ? apartmentCost * Math.pow(1 + propertyAnnualGrowthRate, numYears) : 0;
+
+        function calculateAndDisplayResults() {
+            const apartmentCostInThousands = parseFloat(configElements.apartmentCost.value) || 0;
+            const apartmentCostFull = apartmentCostInThousands * 1000;
+            const actualInitialInvestment = getActualInitialInvestment(); // Uses full apartment cost internally
+
+            const calculationParams = {
+                apartmentCostFull: apartmentCostFull,
+                actualInitialInvestment: actualInitialInvestment,
+                numYears: parseInt(configElements.mortgageTermYears.value) || 25,
+                mortgageAnnualRatePercent: parseFloat(configElements.mortgageAnnualRate.value) || 0,
+                mortgagePaymentMethod: configElements.mortgagePaymentType.value,
+                initialRent: parseFloat(configElements.initialMonthlyRent.value) || 0,
+                rentIndexRatePercent: parseFloat(configElements.rentIndexRate.value) || 0,
+                initialMaintenance: parseFloat(configElements.initialMonthlyMaintenance.value) || 0,
+                maintenanceIndexRatePercent: parseFloat(configElements.maintenanceIndexRate.value) || 0,
+                sp500RatePercent: parseFloat(configElements.sp500Rate.value) || 0,
+                propertyGrowthRatePercent: parseFloat(configElements.propertyGrowthRate.value) || 0
+            };
+
+            const results = performCoreCalculations(calculationParams);
+            const {
+                monthlyReportData, cumulativeNetFlow, totalInterestPaid, totalMaintenancePaid,
+                totalRentPaid, portfolioValueRentInvest,
+                // actualInitialInvestment is already available
+                numYears, sp500RatePercent, // propertyAnnualGrowthRate is in calculationParams
+                // apartmentCostFull is already available
+            } = results;
+
+            const propertySaleTaxRatePercent = parseFloat(configElements.propertySaleTaxRate.value) || 0;
+            const investmentSaleTaxRatePercent = parseFloat(configElements.investmentSaleTaxRate.value) || 0;
+
+            const futurePropertyValuePreTaxVal = apartmentCostFull > 0 ? apartmentCostFull * Math.pow(1 + calculationParams.propertyGrowthRatePercent / 100, numYears) : 0;
             const scenarioProfitBuyPreTaxVal = futurePropertyValuePreTaxVal - actualInitialInvestment - totalInterestPaid - totalMaintenancePaid;
             const finalCapitalRentInvestPreTax = portfolioValueRentInvest;
             const totalCapitalInjectedPortfolio = actualInitialInvestment + cumulativeNetFlow;
@@ -596,7 +630,7 @@
             summaryElements.capitalDifferencePreTax.textContent = capitalDifferenceValuePreTax.toLocaleString('ru-RU', {maximumFractionDigits: 0});
             updateDifferenceFavourText(summaryElements.capitalDifferenceFavourPreTax, summaryElements.capitalDifferencePreTax, capitalDifferenceValuePreTax);
 
-            const propertyGainPreTaxVal = Math.max(0, futurePropertyValuePreTaxVal - apartmentCost);
+            const propertyGainPreTaxVal = Math.max(0, futurePropertyValuePreTaxVal - apartmentCostFull);
             const propertyTaxAmountVal = propertyGainPreTaxVal * (propertySaleTaxRatePercent / 100);
             const futurePropertyValuePostTaxVal = futurePropertyValuePreTaxVal - propertyTaxAmountVal;
             const scenarioProfitBuyPostTaxVal = futurePropertyValuePostTaxVal - actualInitialInvestment - totalInterestPaid - totalMaintenancePaid;
@@ -662,12 +696,12 @@
                     responsive: true, maintainAspectRatio: false, animation: false,
                     scales: {
                         y: { beginAtZero: false, title: { display: true, text: 'Сумма (EUR)', font: { size: 14 } }, ticks: { callback: function(value) { return value.toLocaleString('ru-RU') + ' EUR'; } } },
-                        x: { title: { display: true, text: `Месяц (Всего ${numMonths})`, font: { size: 14 } },
-                            ticks: { autoSkip: true, maxTicksLimit: Math.max(10, Math.min(25, numMonths > 0 ? numMonths / 12 : 25)), maxRotation: 90, minRotation: 45,
+                        x: { title: { display: true, text: `Месяц (Всего ${numYears * 12})`, font: { size: 14 } },
+                            ticks: { autoSkip: true, maxTicksLimit: Math.max(10, Math.min(25, (numYears * 12) > 0 ? (numYears * 12) / 12 : 25)), maxRotation: 90, minRotation: 45,
                                 callback: function(value, index) {
                                    if (monthlyReportData && monthlyReportData[index]) {
                                        const monthNumber = monthlyReportData[index].month;
-                                       if (numMonths <= 60 || (monthNumber -1) % 12 === 0 || numMonths === 0) { return `М ${monthNumber}`; }
+                                       if ((numYears * 12) <= 60 || (monthNumber -1) % 12 === 0 || (numYears * 12) === 0) { return `М ${monthNumber}`; }
                                    } return null;
                                 }
                             }
